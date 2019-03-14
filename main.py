@@ -15,83 +15,72 @@ def sigmoid_prime(z):
     return sigmoid(z) * (1 - sigmoid(z))
 
 
-class Layer(object):
-    def __init__(self, n_in, layer_size):
-        self.W = 2 * np.random.random((layer_size, n_in)) - 1
-        #         self.deltas = np.zeros(layer_size, n_in + 1)
-        self.activations = np.zeros(layer_size)
-        self.learning_rate = 0.1
-
-    def z(self, x):
-        return np.dot(self.W, x)
-
-    def a(self, x):
-        res = sigmoid(self.z(x))
-        return res
-
-    def forward(self, x):
-        # x_tilda = np.concatenate([[1.0], x])
-        res = self.a(x)
-        self.activations = res
-
-        return res
-
-    def error(self, delta):
-        return np.dot(delta, self.W.T) * sigmoid_prime(self.activations)
-
-    def update_with_gradient(self, delta):
-        grad = np.dot(self.activations, delta)
-        self.W += self.learning_rate * grad
-
-
 class Net(object):
-    def __init__(self, n_in):
-        # b || w
-        self.layers = [
-            Layer(n_in + 1, 3),  # Hidden layer
-            Layer(3, 1)  # Output, a logistic regression fn
-        ]
+    def __init__(self, layers):
+        self.weights = []
+        self.activation = sigmoid
+        self.activation_prime = sigmoid_prime
+        # layers = [2,2,1]
+        # range of weight values (-1,1)
+        # input and hidden layers - random((2+1, 2+1)) : 3 x 3
+        for i in range(1, len(layers) - 1):
+            r = 2*np.random.random((layers[i-1] + 1, layers[i] + 1)) - 1
+            self.weights.append(r)
 
-    def h(self, x):
-        prev_out = np.concatenate([[1.0], x])
-        for l in self.layers:
-            prev_out = l.forward(prev_out)
+        # output layer - random((2+1, 1)) : 3 x 1
+        r = 2*np.random.random( (layers[i] + 1, layers[i+1])) - 1
+        self.weights.append(r)
 
-        return prev_out[0]
+    def fit(self, X, y, learning_rate=0.2, epochs=1000):
+        # Add column of ones to X
+        # This is to add the bias unit to the input layer
+        ones = np.atleast_2d(np.ones(X.shape[0]))
+        X = np.concatenate((ones.T, X), axis=1)
 
-    def loss(self, y, t):
-        error = (y - t) * sigmoid_prime(self.layers[-1].activations)
-        return error[0]
+        for k in range(epochs):
+            serror = 0
+            for i in range(len(X)):
+                # i = np.random.randint(X.shape[0])
+                a = [X[i]]
 
-    def backwards(self, loss):
-        # Calc deltas
-        # deltas = [loss * sigmoid_prime(self.layers[-1].activations)[0]]
-        deltas = [loss]
-        for l in reversed(self.layers[:-1]):
-            deltas.append(l.error(deltas[-1]))
+                for l in range(len(self.weights)):
+                    dot_value = np.dot(a[l], self.weights[l])
+                    activation = self.activation(dot_value)
+                    a.append(activation)
+                # output layer
+                error = y[i] - a[-1]
+                serror += error
 
-        deltas.reverse()
+                deltas = [error * self.activation_prime(a[-1])]
 
-        # update with ggradients
-        for i, l in enumerate(self.layers):
-            l.update_with_gradient(deltas[i])
+                # we need to begin at the second to last layer
+                # (a layer before the output layer)
+                for l in range(len(a) - 2, 0, -1):
+                    deltas.append(deltas[-1].dot(self.weights[l].T) * self.activation_prime(a[l]))
 
-    def train_loop(self, X, t, epochs):
-        # no batch
-        for ep in range(epochs):
-            loss = 0
-            for x_i, t_i in zip(X, t):
-            # i = np.random.randint(len(X))
-            #     x_i = X[i]
-            #     t_i = t[i]
-                y_i = self.h(x_i)
-                loss += self.loss(y_i, t_i)
-                self.backwards(loss)
+                # reverse
+                # [level3(output)->level2(hidden)]  => [level2(hidden)->level3(output)]
+                deltas.reverse()
 
-            avg_loss = loss / len(X)
+                # backpropagation
+                # 1. Multiply its output delta and input activation
+                #    to get the gradient of the weight.
+                # 2. Subtract a ratio (percentage) of the gradient from the weight.
+                for j in range(len(self.weights)):
+                    layer = np.atleast_2d(a[j])
+                    delta = np.atleast_2d(deltas[j])
+                    self.weights[j] += learning_rate * layer.T.dot(delta)
 
-            # if ep % 1000 == 0:
-            print("Loss epoch={}:\t{}".format(ep, avg_loss))
+            avg_error = serror / len(X)
+
+            if k % 100 == 0:
+                print('epochs:\t{}\t\tavg_loss:\t{}'.format(k, avg_error))
+
+    def predict(self, x):
+        a = np.concatenate((np.array([[1]]), np.array([x])), axis=1)
+        for l in range(0, len(self.weights)):
+            a = self.activation(np.dot(a, self.weights[l]))
+        return a
 
 
 def main():
@@ -131,14 +120,19 @@ def main():
     # ax.scatter(X2[:, 0], X2[:, 1], color='green')
     #
     # plt.show()
+    X = [[1, 0],
+         [0, 1],
+         [0, -1],
+         [-1, 0]]
+    X = np.asarray(X)
+    t = [0, 1, 1, 0]
+    F = Net([2, 2, 1])
+    F.fit(X, t)
 
-    F = Net(2)
-    F.train_loop(X, t, 1000)
-
-    print("0 0:\t", F.h([0, 0]))
-    print("1 0:\t", F.h([1, 0]))
-    print("0 1:\t", F.h([0, 1]))
-    print("1 1:\t", F.h([1, 1]))
+    print("0 0:\t", F.predict([0, 0]))
+    print("1 0:\t", F.predict([1, 0]))
+    print("0 1:\t", F.predict([0, 1]))
+    print("1 1:\t", F.predict([1, 1]))
 
 
 if __name__ == '__main__':
