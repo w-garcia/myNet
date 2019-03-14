@@ -65,7 +65,8 @@ class Net(object):
 
     def backwards(self, loss):
         # Calc deltas
-        deltas = [loss * sigmoid_prime(self.layers[-1].activations)[0]]
+        # deltas = [loss * sigmoid_prime(self.layers[-1].activations)[0]]
+        deltas = [loss]
         for l in reversed(self.layers[:-1]):
             deltas.append(l.error(deltas[-1]))
 
